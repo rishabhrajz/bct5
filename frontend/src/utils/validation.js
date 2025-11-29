@@ -17,7 +17,7 @@ export function validateDID(did) {
 export function validateAmount(amount, min = 0) {
     if (!amount) return 'Amount is required';
     if (isNaN(amount)) return 'Amount must be a number';
-    if (BigInt(amount) <= BigInt(min)) {
+    if (parseFloat(amount) <= parseFloat(min)) {
         return `Amount must be greater than ${min}`;
     }
     return null;

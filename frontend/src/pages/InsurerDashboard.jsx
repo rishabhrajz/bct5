@@ -155,7 +155,7 @@ export default function InsurerDashboard() {
             const { signer } = await getProviderAndSigner();
             const { claimContract } = getContracts(signer);
 
-            const tx = await claimContract.approveAndPayClaim(claimId, providerWallet, {
+            const tx = await claimContract.approveAndPayClaim(claimId, parseEth(amount), {
                 value: parseEth(amount),
             });
 

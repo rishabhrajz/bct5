@@ -164,13 +164,16 @@ contract PolicyContract is ReentrancyGuard, Ownable {
             coverageAmount: coverageAmount,
             premiumPaid: msg.value,
             tier: tier,
-            status: PolicyStatus.Pending,
+            status: PolicyStatus.Active, // Auto-approve: Set to Active immediately
             startEpoch: startEpoch,
             endEpoch: endEpoch,
             kycDocCid: kycDocCid
         });
         
         emit PolicyRequested(policyId, beneficiary, msg.value, kycDocCid);
+        // Auto-approve: Emit PolicyIssued immediately
+        emit PolicyIssued(policyId, beneficiary, coverageAmount, startEpoch, endEpoch);
+        emit PolicyApproved(policyId);
         
         return policyId;
     }

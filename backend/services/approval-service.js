@@ -90,7 +90,23 @@ async function approvePolicy(policyId, insurerAddress) {
       }
     });
 
-    console.log(`✅ Policy #${policy.onchainPolicyId} approved and activated`);
+    console.log(`✅ Policy #${policy.onchainPolicyId} approved and activated in database`);
+
+    // Approve policy on-chain
+    try {
+      const { policyContract, signer } = getContracts();
+      if (signer) {
+        console.log(`⛓️  Approving policy #${policy.onchainPolicyId} on-chain...`);
+        const approveTx = await policyContract.approvePolicy(policy.onchainPolicyId);
+        await approveTx.wait();
+        console.log(`✅ Policy approved on-chain: ${approveTx.hash}`);
+      }
+    } catch (onchainError) {
+      console.error('⚠️  Failed to approve policy on-chain:', onchainError.message);
+      // We don't throw here to avoid rolling back the DB change if on-chain fails,
+      // but in production we should probably handle this better.
+    }
+
     return policy;
   } catch (error) {
     console.error('Error approving policy:', error);
@@ -213,7 +229,7 @@ async function markClaimPaid(claimId, txHash) {
 async function getPendingClaims() {
   try {
     return await prisma.claim.findMany({
-      where: { status: 'PENDING' },
+      where: { status: 'Submitted' },
       include: {
         policy: {
           include: {
