@@ -1,0 +1,1 @@
+{"status":"ok","timestamp":"2025-11-30T13:46:28.082Z","uptime":795.179686625,"eventListener":{"isRunning":true,"lastProcessedBlock":4,"pollInterval":5000,"timestamp":"2025-11-30T13:46:28.083Z"},"reconciler":{"isRunning":false,"lastRun":"2025-11-30T13:46:14.773Z","interval":60000,"autoFixEnabled":true,"stats":{"totalReconciled":0,"autoFixed":0,"pendingSuggestions":0}}}
