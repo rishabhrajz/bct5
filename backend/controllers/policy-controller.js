@@ -71,16 +71,19 @@ export async function handleListPolicies(req, res) {
             beneficiaryAddress: p.beneficiaryAddress,
             beneficiaryDid: p.beneficiaryDid,
             coverageAmount: p.coverageAmount,
-            startEpoch: p.startEpoch,
-            endEpoch: p.endEpoch,
-            providerId: p.providerId,
-            providerName: p.provider?.name,
-            policyVcCid: p.policyVcCid,
-            status: p.status,
             tier: p.tier,
             premiumPaid: p.premiumPaid,
-            approvedAt: p.approvedAt,
-            createdAt: p.createdAt
+            startEpoch: p.startEpoch,
+            endEpoch: p.endEpoch,
+            status: p.status,
+            onchainTxHash: p.onchainTxHash,           // NEW - Phase B
+            onchainBlockNumber: p.onchainBlockNumber, // NEW - Phase B
+            source: p.source,                         // NEW - Phase B
+            policyVcCid: p.policyVcCid,
+            vcStatus: p.vcStatus,
+            providerName: p.provider?.name,
+            createdAt: p.createdAt,
+            approvedAt: p.approvedAt
         }));
 
         res.json({

@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { initContracts } from './contract-service.js';
 import { getOrCreateIssuerDid } from './veramo-setup.js';
 import { startEventListener, getListenerHealth } from './services/event-listener.js';
+import { runReconciliation, getReconcilerStatus, startReconciler } from './services/reconciler.js';
 import { pinFile } from './ipfs-pinata.js';
 import { handleProviderOnboard, handleListProviders } from './controllers/provider-controller.js';
 import { handleIssuePolicy, handleListPolicies, handleGetPolicy } from './controllers/policy-controller.js';
@@ -25,14 +26,218 @@ app.use(express.urlencoded({ extended: true }));
 // Multer for file uploads (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Health check
+// Health check endpoints
 app.get('/health', (req, res) => {
-    const listenerHealth = getListenerHealth();
-    res.json({
+    const health = {
         status: 'ok',
         timestamp: new Date().toISOString(),
-        eventListener: listenerHealth
+        uptime: process.uptime(),
+        eventListener: getListenerHealth(),
+        reconciler: getReconcilerStatus()
+    };
+    res.json(health);
+});
+
+// Liveness probe (for container orchestration)
+app.get('/health/liveness', (req, res) => {
+    res.status(200).json({ alive: true, timestamp: new Date().toISOString() });
+});
+
+// Readiness probe (checks all dependencies)
+app.get('/health/readiness', async (req, res) => {
+    const checks = {
+        database: false,
+        blockchain: false,
+        eventListener: false,
+        migrations: false
+    };
+
+    try {
+        // Check database connection
+        await prisma.$queryRaw`SELECT 1`;
+        checks.database = true;
+
+        // Check if migrations are applied
+        try {
+            await prisma.policy.count();
+            checks.migrations = true;
+        } catch (e) {
+            checks.migrations = false;
+        }
+
+        // Check blockchain connection
+        try {
+            const { policyContract } = getContracts();
+            const network = await policyContract.runner.provider.getNetwork();
+            checks.blockchain = network.chainId > 0;
+        } catch (e) {
+            checks.blockchain = false;
+        }
+
+        // Check event listener
+        const listener = getListenerHealth();
+        checks.eventListener = listener.isRunning === true;
+
+        const allReady = Object.values(checks).every(v => v === true);
+
+        res.status(allReady ? 200 : 503).json({
+            ready: allReady,
+            checks,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(503).json({
+            ready: false,
+            checks,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Metrics endpoint (simple counters)
+let metrics = {
+    tx_sent_count: 0,
+    tx_mined_count: 0,
+    reconciler_runs: 0,
+    reconciler_fixes: 0,
+    api_requests: 0
+};
+
+app.get('/metrics', (req, res) => {
+    const reconcilerStatus = getReconcilerStatus();
+    res.json({
+        ...metrics,
+        reconciler_total_reconciled: reconcilerStatus.stats?.totalReconciled || 0,
+        reconciler_auto_fixed: reconcilerStatus.stats?.autoFixed || 0,
+        reconciler_pending_suggestions: reconcilerStatus.stats?.pendingSuggestions || 0,
+        uptime_seconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString()
     });
+});
+
+// Request counter middleware
+app.use((req, res, next) => {
+    metrics.api_requests++;
+    next();
+});
+
+// Reconciler endpoints
+app.get('/api/reconcile/status', (req, res) => {
+    const status = getReconcilerStatus();
+    res.json(status);
+});
+
+app.get('/api/reconcile/mismatches', async (req, res) => {
+    try {
+        // Get all suggestions (pending manual review)
+        const suggestions = await prisma.reconciliationAudit.findMany({
+            where: {
+                action: 'suggestion',
+                appliedBy: 'pending'
+            },
+            orderBy: { timestamp: 'desc' },
+            take: 100
+        });
+
+        const mismatches = suggestions.map(s => ({
+            id: `${s.entityType}_${s.entityId}`,
+            entityType: s.entityType,
+            entityId: s.entityId,
+            field: s.fieldName,
+            dbValue: s.oldValue,
+            chainValue: s.newValue,
+            detectedAt: s.timestamp,
+            severity: s.reconcileReason.includes('critical') ? 'critical' : 'high',
+            reason: s.reconcileReason
+        }));
+
+        res.json({ mismatches, count: mismatches.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/reconcile/suggestions', async (req, res) => {
+    try {
+        const suggestions = await prisma.reconciliationAudit.findMany({
+            where: {
+                action: 'suggestion',
+                appliedBy: 'pending'
+            },
+            orderBy: { timestamp: 'desc' }
+        });
+
+        res.json({ suggestions, count: suggestions.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/reconcile/apply/:id', async (req, res) => {
+    try {
+        const suggestionId = parseInt(req.params.id);
+        const { adminAddress } = req.body;
+
+        const suggestion = await prisma.reconciliationAudit.findUnique({
+            where: { id: suggestionId }
+        });
+
+        if (!suggestion || suggestion.action !== 'suggestion') {
+            return res.status(404).json({ error: 'Suggestion not found' });
+        }
+
+        if (suggestion.appliedBy !== 'pending') {
+            return res.status(400).json({ error: 'Suggestion already applied' });
+        }
+
+        // Apply the suggestion
+        const newValue = JSON.parse(suggestion.newValue);
+        const updateData = { [suggestion.fieldName]: newValue };
+
+        if (suggestion.entityType === 'policy') {
+            await prisma.policy.update({
+                where: { id: suggestion.entityId },
+                data: updateData
+            });
+        } else {
+            await prisma.claim.update({
+                where: { id: suggestion.entityId },
+                data: updateData
+            });
+        }
+
+        // Mark suggestion as applied
+        await prisma.reconciliationAudit.update({
+            where: { id: suggestionId },
+            data: {
+                appliedBy: adminAddress || 'admin',
+                action: 'manual_apply'
+            }
+        });
+
+        res.json({
+            success: true,
+            applied: {
+                entityType: suggestion.entityType,
+                entityId: suggestion.entityId,
+                oldValue: suggestion.oldValue,
+                newValue: suggestion.newValue
+            },
+            auditId: suggestionId
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/reconcile/run', async (req, res) => {
+    try {
+        await runReconciliation();
+        res.json({ success: true, message: 'Reconciliation triggered' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // ===== Provider Routes =====
@@ -529,7 +734,11 @@ async function startServer() {
         // Start event listener in development
         if (process.env.NODE_ENV !== 'production') {
             console.log('🎧 Starting event listener...');
-            await startEventListener();
+            startEventListener();
+
+            // Start reconciler
+            console.log('🔄 Starting reconciler...');
+            startReconciler();
             console.log('✅ Event listener started\n');
         }
 

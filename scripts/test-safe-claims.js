@@ -18,7 +18,7 @@ async function testSafeClaims() {
     console.log('🧪 Testing Safe Claim Lifecycle\n');
 
     try {
-        const provider = new ethers JsonRpcProvider(RPC_URL);
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
         const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
         console.log(`✅ Connected as: ${wallet.address}\n`);
 

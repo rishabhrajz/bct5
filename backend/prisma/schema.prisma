@@ -118,6 +118,25 @@ model KYCDocument {
   @@index([documentType])
 }
 
+model ReconciliationAudit {
+  id                  Int       @id @default(autoincrement())
+  action              String    // "auto_fix", "suggestion", "manual_apply"
+  entityType          String    // "policy" or "claim"
+  entityId            Int       // DB record ID
+  fieldName           String?   // Which field was reconciled
+  oldValue            String?   // Previous value (JSON)
+  newValue            String?   // New value (JSON)
+  onchainTxHash       String?   // Related blockchain TX
+  onchainBlockNumber  Int?      // Block number
+  reconcileReason     String    // Why reconciliation was needed
+  appliedBy           String    // "system" or admin address
+  timestamp           DateTime  @default(now())
+  
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([timestamp])
+}
+
 model Payment {
   id              Int       @id @default(autoincrement())
   txHash          String    @unique

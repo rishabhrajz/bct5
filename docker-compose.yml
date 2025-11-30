@@ -1,62 +1,78 @@
 version: '3.8'
 
 services:
-  hardhat-node:
+  # Hardhat local blockchain
+  hardhat:
     image: node:18-alpine
     working_dir: /app
-    volumes:
-      - ./:/app
-    command: npx hardhat node --hostname 0.0.0.0
+    command: sh -c "npm install && npx hardhat node --hostname 0.0.0.0"
     ports:
       - "8545:8545"
+    volumes:
+      - ./:/app
+      - hardhat-cache:/app/cache
+      - hardhat-artifacts:/app/artifacts
     networks:
       - projecty-network
 
+  # Backend API
   backend:
-    image: node:18-alpine
-    working_dir: /app/backend
-    volumes:
-      - ./backend:/app/backend
-      - ./deployments:/app/deployments
-      - ./artifacts:/app/artifacts
-    environment:
-      - PORT=4000
-      - NODE_ENV=development
-      - ETH_RPC=http://hardhat-node:8545
-      - PRIVATE_KEY=${PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
-      - PINATA_JWT=${PINATA_JWT}
-      - PINATA_GATEWAY=${PINATA_GATEWAY:-https://gateway.pinata.cloud/ipfs/}
-      - DATABASE_URL=file:./data/projecty.db
-      - VERAMO_USE_KMS_LOCAL=true
-      - VERAMO_KEY_STORAGE_PATH=./veramo_keystore
-      - VERAMO_ISSUER_ALIAS=projecty-issuer
-      - KMS_SECRET_KEY=${KMS_SECRET_KEY:-default-secret-key-change-in-production-32chars}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "4000:4000"
-    depends_on:
-      - hardhat-node
-    command: >
-      sh -c "npm install &&
-             npx prisma generate &&
-             npx prisma migrate deploy &&
-             npm run dev"
-    networks:
-      - projecty-network
-
-  frontend:
-    image: node:18-alpine
-    working_dir: /app/frontend
-    volumes:
-      - ./frontend:/app/frontend
     environment:
-      - VITE_API_URL=http://localhost:4000
-    ports:
-      - "3000:3000"
-    command: >
-      sh -c "npm install && npm run dev -- --host"
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=4000
+      - DATABASE_URL=file:./data/projecty.db
+      - BLOCKCHAIN_RPC_URL=http://hardhat:8545
+      - EVENT_POLL_INTERVAL_MS=5000
+      - RECONCILE_INTERVAL_MS=60000
+      - RECONCILER_AUTO_FIX=true
+      - TX_WAIT_TIMEOUT_MS=120000
+    volumes:
+      - backend-data:/app/data
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - hardhat
     networks:
       - projecty-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - projecty-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   projecty-network:
     driver: bridge
+
+volumes:
+  backend-data:
+    driver: local
+  hardhat-cache:
+    driver: local
+  hardhat-artifacts:
+    driver: local

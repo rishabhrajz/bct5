@@ -178,6 +178,9 @@ export async function handleListClaims(req, res) {
             fileCid: c.fileCid,
             amount: c.amount,
             status: c.status,
+            onchainTxHash: c.onchainTxHash,           // NEW - Phase B
+            onchainBlockNumber: c.onchainBlockNumber, // NEW - Phase B
+            source: c.source,                         // NEW - Phase B
             txHash: c.txHash,
             providerName: c.policy?.provider?.name,
             createdAt: c.createdAt

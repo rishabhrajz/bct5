@@ -1,409 +1,240 @@
-# ProjectY Architecture
+# ProjectY Architecture Documentation
 
 ## System Overview
 
-ProjectY is a decentralized healthcare insurance system that combines:
-- **Decentralized Identifiers (DIDs)** for identity
-- **Verifiable Credentials (VCs)** for trustless claims
-- **Ethereum smart contracts** for policy and claim lifecycle
-- **IPFS** for decentralized document storage
-
-## Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (React)                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ Provider │ │  Policy  │ │  Upload  │ │  Dashboard   │   │
-│  │ Onboard  │ │  Issue   │ │  Docs    │ │  (Insurer)   │   │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘   │
-└───────┼────────────┼────────────┼───────────────┼───────────┘
-        │            │            │               │
-        └────────────┴────────────┴───────────────┘
-                         HTTP/REST
-                             │
-┌────────────────────────────┼────────────────────────────────┐
-│                   Backend (Node/Express)                     │
-│  ┌─────────────────────────▼──────────────────────────┐     │
-│  │                  Controllers                        │     │
-│  │  • ProviderController  • PolicyController          │     │
-│  │  • ClaimController     • DebugController           │     │
-│  └────┬────────────────────┬────────────┬─────────────┘     │
-│       │                    │            │                    │
-│  ┌────▼────────┐  ┌────────▼────┐  ┌───▼──────────┐        │
-│  │  Provider   │  │   Policy    │  │    Claim     │        │
-│  │  Service    │  │   Service   │  │   Service    │        │
-│  └────┬────────┘  └────┬────────┘  └───┬──────────┘        │
-│       │                │               │                     │
-│       │          ┌─────▼───────────────▼─────┐              │
-│       │          │      VC Utils              │              │
-│       │          │  verifyVcForPolicy()       │              │
-│       │          └────────────────────────────┘              │
-│       │                                                       │
-│  ┌────▼──────────────────────────────────────────────┐      │
-│  │              Core Services                         │      │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │      │
-│  │  │  Veramo  │ │  Pinata  │ │     Contract     │  │      │
-│  │  │  Setup   │ │   IPFS   │ │     Service      │  │      │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────────────┘  │      │
-│  │       │            │            │                 │      │
-│  └───────┼────────────┼────────────┼─────────────────┘      │
-│          │            │            │                         │
-│  ┌───────▼────────────▼────────────┼─────────────────┐      │
-│  │         Prisma ORM (SQLite)     │                 │      │
-│  │  ┌──────────┐ ┌────────┐ ┌───────────┐           │      │
-│  │  │ Provider │ │ Policy │ │   Claim   │           │      │
-│  │  │  Table   │ │  Table │ │   Table   │           │      │
-│  │  └──────────┘ └────────┘ └───────────┘           │      │
-│  └─────────────────────────────────────────────────────┘    │
-└──────────────────┬─────────────┬───────────────────────────┘
-                   │             │
-        ┌──────────▼─────┐  ┌────▼───────────────┐
-        │  File Storage  │  │  Ethereum Network  │
-        │  (Persistent   │  │  (Hardhat Local)   │
-        │  Keystore)     │  │                    │
-        └────────────────┘  └────┬───────────────┘
-                                 │
-        ┌────────────────────────┼───────────────────────┐
-        │            Smart Contracts                     │
-        │  ┌──────────────┐ ┌──────────┐ ┌───────────┐ │
-        │  │  Identity    │ │  Policy  │ │   Claim   │ │
-        │  │  Registry    │ │ Contract │ │ Contract  │ │
-        │  └──────────────┘ └──────────┘ └───────────┘ │
-        └────────────────────────────────────────────────┘
-                                 │
-        ┌────────────────────────▼───────────────────────┐
-        │                 Pinata IPFS                    │
-        │  • Provider Licenses  • Provider VCs           │
-        │  • Policy VCs         • Patient Documents      │
-        └─────────────────────────────────────────────────┘
-```
-
-## On-Chain vs Off-Chain Data
-
-### On-Chain (Ethereum Smart Contracts)
-
-**Stored on blockchain for immutability and transparency:**
-
-1. **Identity Registry**
-   - DID → Address mappings
-   - Registration events
-
-2. **PolicyContract**
-   - Policy ID (auto-increment)
-   - Beneficiary address
-   - Coverage amount (wei)
-   - Start/end timestamps
-   - Active/revoked status
-
-3. **ClaimContract**
-   - Claim ID (auto-increment)
-   - Policy ID reference
-   - Patient address
-   - Claim amount
-   - Document CID reference
-   - Status (Submitted, UnderReview, Approved, Rejected, Paid)
-
-**Why on-chain?**
-- ✅ Immutable audit trail
-- ✅ Transparent policy terms
-- ✅ Trustless status transitions
-- ✅ Verifiable by all parties
-
-### Off-Chain (IPFS + Database)
-
-**Large data stored on IPFS (Pinata):**
-
-1. **Provider Licenses** (Images/PDFs)
-   - Medical licenses, certifications
-   - Too large for blockchain
-
-2. **Verifiable Credentials** (JSON)
-   - Provider VCs (with cryptographic proofs)
-   - Policy VCs
-   - JWT-signed credentials
-
-3. **Patient Documents** (Images/PDFs)
-   - Medical reports, prescriptions
-   - Supporting evidence for claims
-
-**Why IPFS?**
-- ✅ Decentralized storage
-- ✅ Content-addressed (CID-based)
-- ✅ Cost-effective for large files
-- ✅ Persistent via Pinata pinning
-
-**Database (SQLite via Prisma):**
-
-Stores **metadata and mappings**:
-
-1. **Provider** table
-   - Maps `providerDid` → `vcCid`
-   - Links provider to their VC
-   - Stores issuer information
-
-2. **Policy** table
-   - **Critical mapping**: `onchainPolicyId` → `providerId`
-   - Enables fast claim verification
-   - Unique constraint on `onchainPolicyId`
-
-3. **Claim** table
-   - Links claims to policies (DB foreign key)
-   - Stores status for quick queries
-
-**Why Database?**
-- ✅ Fast lookups for verification
-- ✅ Relational integrity (policy → provider)
-- ✅ Query optimization for dashboards
-- ✅ Not everything needs blockchain immutability
-
-## Veramo and Persistent Keys
-
-### Design Choice: kms-local with File Storage
-
-**Problem**: How to manage issuer keys for VC issuance?
-
-**Options Considered**:
-1. ❌ **Google KMS**: Centralized, requires external service
-2. ❌ **In-memory keys**: Lost on restart, not reproducible
-3. ✅ **File-based kms-local**: Persistent, decentralized, migratable
-
-### Implementation
-
-```javascript
-// veramo-setup.js
-const keyStorePath = './veramo_keystore/keys.json';
-
-class FileKeyStore {
-  // Persists keys to disk as JSON
-  _save() {
-    fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
-  }
-}
-
-const kms = new KeyManagementSystem({
-  store: fileKeyStore,
-  secretBox: new SecretBox(KMS_SECRET_KEY)
-});
-```
-
-**Benefits**:
-- Keys survive server restarts
-- Same issuer DID across deployments
-- Can be backed up and migrated
-- No dependency on external KMS
-- Easy to upgrade to hardware KMS later
-
-### Issuer DID Management
-
-```javascript
-// backend/services/veramo-setup.js
-async function getOrCreateIssuerDid() {
-  // Check database for existing issuer
-  const existing = await prisma.veramoIssuer.findUnique({
-    where: { alias: 'projecty-issuer' }
-  });
-  
-  if (existing) return existing.did;
-  
-  // Create new issuer and persist
-  const identifier = await veramoAgent.didManagerCreate({
-    provider: 'did:ethr:localhost',
-    kms: 'local'
-  });
-  
-  await prisma.veramoIssuer.create({
-    data: { alias: 'projecty-issuer', did: identifier.did }
-  });
-  
-  return identifier.did;
-}
-```
-
-## Critical Verification Flow
-
-### Claim Submission with Provider VC Verification
-
-```
-┌─────────┐                                          ┌─────────┐
-│ Patient │                                          │ Backend │
-└────┬────┘                                          └────┬────┘
-     │  POST /claim/submit                                │
-     │  {                                                 │
-     │    policyId: 1,                                   │
-     │    providerVcCid: "Qm...",                        │
-     │    amount: "500000000000000000"                   │
-     │  }                                                 │
-     ├────────────────────────────────────────────────────>
-     │                                                    │
-     │                           ┌────────────────────────┼──┐
-     │                           │ verifyVcForPolicy()    │  │
-     │                           │                        │  │
-     │                           │ 1. Query DB:           │  │
-     │                           │    Policy(onchainId=1) │  │
-     │                           │    Include provider    │  │
-     │                           │                        │  │
-     │                           │ 2. Compare CID:        │  │
-     │                           │    presented == stored │  │
-     │                           │                        │  │
-     │                           │ 3. Return verification │  │
-     │                           └────────────────────────┼──┘
-     │                                                    │
-     │                      If verified ✅:              │
-     │                      ┌─────────────────────────────┤
-     │                      │ Call claimContract         │
-     │                      │   .submitClaim(...)        │
-     │                      └─────────────────────────────┤
-     │                                                    │
-     │  {                                                 │
-     │    success: true,                                 │
-     │    claimId: 1,                                    │
-     │    txHash: "0x...",                               │
-     │    verification: { verified: true, ... }          │
-     │  }                                                 │
-     <────────────────────────────────────────────────────┤
-     │                                                    │
-```
-
-### Key Verification Steps
-
-1. **Policy Lookup**
-   ```javascript
-   const policy = await prisma.policy.findUnique({
-     where: { onchainPolicyId: policyId },
-     include: { provider: true }
-   });
-   ```
-
-2. **CID Verification**
-   ```javascript
-   if (presentedVcCid !== policy.provider.vcCid) {
-     return { verified: false, error: 'vcCid_mismatch' };
-   }
-   ```
-
-3. **JWT Verification** (Optional)
-   ```javascript
-   const result = await veramoAgent.verifyCredential({
-     credential: presentedJwt
-   });
-   ```
-
-4. **On-Chain Submission**
-   ```javascript
-   const tx = await claimContract.submitClaim(
-     policyId,
-     patientAddress,
-     amount,
-     fileCid
-   );
-   ```
-
-## Data Flow: Provider Onboarding to Claim Submission
-
-### 1. Provider Onboarding
-
-```
-Provider → Backend → Pinata IPFS → Veramo → Pinata IPFS → Database
-          (upload)   (license)    (issue   (VC)          (provider
-                                   VC)                    record)
-```
-
-**Output**: `providerVcCid` stored in database, linked to `providerDid`
-
-### 2. Policy Issuance
-
-```
-Insurer → Backend → PolicyContract → Veramo → Pinata IPFS → Database
-                    (on-chain)       (issue   (policy VC)   (policy
-                                     policy                 record with
-                                     VC)                    policyId →
-                                                            providerId
-                                                            mapping)
-```
-
-**Critical**: Database stores `onchainPolicyId → providerId` mapping
-
-### 3. Claim Submission
-
-```
-Patient → Backend → verifyVcForPolicy() → ClaimContract → Database
-                    (DB lookup:           (on-chain)      (claim
-                     policyId →                           record)
-                     providerId →
-                     vcCid match)
-```
-
-**Verification happens entirely off-chain using DB**, but claim is recorded on-chain for immutability.
-
-## Security Considerations
-
-### 1. Key Management
-- **Current**: File-based local storage
-- **Production**: Migrate to HSM or cloud KMS
-- **Secret**: `KMS_SECRET_KEY` encrypts keystore
-
-### 2. Access Control
-- **Current**: Open API (development)
-- **Production**: JWT-based authentication, role-based access
-
-### 3. Data Privacy
-- **On-Chain**: Only policy IDs, amounts, statuses (public)
-- **Off-Chain**: Patient PHI stored on IPFS with access controls
-
-### 4. VC Verification
-- **Multi-layered**: CID matching + optional JWT crypto verification
-- **Debugging**: `tried` array for transparent failure analysis
-
-## Scalability Considerations
-
-### Current (Development)
-- Single SQLite database
-- Local Hardhat node
-- Single backend instance
-
-### Production Recommendations
-1. **Database**: PostgreSQL with replication
-2. **Blockchain**: Mainnet or L2 (Polygon, Arbitrum)
-3. **IPFS**: Pinata + Filecoin for redundancy
-4. **Backend**: Horizontal scaling with load balancer
-5. **Caching**: Redis for frequently accessed VCs
-6. **Events**: Blockchain event indexing (The Graph)
-
-## Technology Choices
-
-### Ethers v6
-- Modern API
-- Better TypeScript support
-- Simpler contract interaction
-- Compatible with latest Hardhat
-
-### Veramo
-- W3C-compliant VCs
-- Modular architecture
-- Supports multiple DID methods
-- Active development
-
-### Prisma
-- Type-safe ORM
-- Great DX with migrations
-- Multi-database support (easy to switch to PostgreSQL)
-
-### Pinata
-- Reliable IPFS pinning
-- Simple API
-- Free tier sufficient for development
-- Good uptime
-
-## Future Enhancements
-
-1. **ZK-Proofs**: Privacy-preserving claim verification
-2. **Multi-Sig Policies**: Require multiple approvers
-3. **Automated Payouts**: Smart contract-based claim settlement
-4. **Oracle Integration**: Real-world data validation
-5. **Mobile App**: React Native for patient/provider apps
-6. **Graph Indexing**: Fast historical query support
+ProjectY is an event-driven, blockchain-backed insurance platform with real-time synchronization and automated reconciliation.
 
 ---
 
-**Architecture designed for decentralization, verifiability, and scalability**
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend Layer                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
+│  │   Provider   │  │   Patient    │  │  Admin Reconcile   │   │
+│  │  Dashboard   │  │  Dashboard   │  │    Dashboard       │   │
+│  └──────────────┘  └──────────────┘  └────────────────────┘   │
+└────────────┬────────────────┬─────────────────┬────────────────┘
+             │                │                 │
+             ▼                ▼                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         Backend API Layer                        │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Express REST API                                         │  │
+│  │  - Provider onboarding     - Claim submission            │  │
+│  │  - Policy issuance         - Reconciliation endpoints    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└───────┬──────────────┬──────────────┬────────────────┬─────────┘
+        │              │              │                │
+        ▼              ▼              ▼                ▼
+┌──────────────┐ ┌──────────┐ ┌─────────────┐ ┌──────────────┐
+│   Database   │ │Blockchain│ │  Veramo DID │ │  IPFS/Pinata │
+│   (SQLite)   │ │(Hardhat) │ │  VC Service │ │   Storage    │
+└──────┬───────┘ └────┬─────┘ └─────────────┘ └──────────────┘
+       │              │
+       │              │
+       ▼              ▼
+┌─────────────────────────────────┐
+│     Background Services         │
+│  ┌───────────────────────────┐ │
+│  │   Event Listener          │ │
+│  │   - Polls blockchain      │ │
+│  │   - Syncs events → DB     │ │
+│  └───────────────────────────┘ │
+│  ┌───────────────────────────┐ │
+│  │   Reconciler              │ │
+│  │   - Compares DB vs chain  │ │
+│  │   - Auto-fixes mismatches │ │
+│  │   - Generates suggestions │ │
+│  └───────────────────────────┘ │
+└─────────────────────────────────┘
+```
+
+---
+
+## Data Flow: Event-Driven Pipeline
+
+**Complete flow from transaction to reconciliation:**
+
+```
+User Action → TX → Receipt → Event → DB → Reconciler → Admin UI
+
+1. User submits policy/claim via frontend
+2. Frontend sends TX to blockchain
+3. Backend waits for receipt (with timeout)
+4. Backend verifies event in receipt
+5. DB updated only after event confirmation
+6. Event listener syncs any missed events
+7. Reconciler detects mismatches
+8. Admin UI shows reconciliation status
+```
+
+---
+
+## Pattern 1: Safe Transaction (Write Path)
+
+**Used for:** Policy issuance, claim submission, claim approval
+
+```javascript
+// 1. Send TX
+const tx = await contract.requestPolicy(...);
+
+// 2. Wait for receipt (with timeout)
+const receipt = await tx.wait(1);
+
+// 3. Verify event
+const event = await verifyEvent(contract, 'PolicyIssued', [policyId], receipt.blockNumber);
+
+// 4. Update DB only if event confirmed
+if (event) {
+  await prisma.policy.create({ status: 'ACTIVE', ... });
+} else {
+  await prisma.policy.create({ status: 'PENDING_ONCHAIN', ... });
+}
+```
+
+---
+
+## Pattern 2: Event Listener (Read Path)
+
+```javascript
+// Poll blockchain every 5 seconds
+const events = await policyContract.queryFilter(
+  policyContract.filters.PolicyIssued(),
+  lastBlock + 1,
+  currentBlock
+);
+
+for (const event of events) {
+  let policy = await prisma.policy.findFirst({
+    where: { onchainPolicyId: event.args.policyId }
+  });
+  
+  if (!policy) {
+    // Query contract for full details
+    const onchainPolicy = await policyContract.policies(event.args.policyId);
+    
+    // Create from on-chain data
+    policy = await prisma.policy.create({
+      ...onchainPolicy,
+      source: 'onchain'
+    });
+  }
+}
+```
+
+---
+
+## Pattern 3: Reconciliation (Consistency Check)
+
+```javascript
+// Run every 60 seconds
+for (const policy of policies) {
+  const onchainPolicy = await policyContract.policies(policy.onchainPolicyId);
+  
+  // Detect mismatch
+  if (policy.status !== mapOnchainStatus(onchainPolicy.status)) {
+    // Auto-fix if safe
+    if (isSafeToAutoFix({ field: 'status' })) {
+      await prisma.policy.update({
+        where: { id: policy.id },
+        data: { status: mapOnchainStatus(onchainPolicy.status) }
+      });
+      
+      // Log audit entry
+      await prisma.reconciliationAudit.create({
+        action: 'auto_fix',
+        entityType: 'policy',
+        fieldName: 'status',
+        oldValue: policy.status,
+        newValue: mapOnchainStatus(onchainPolicy.status)
+      });
+    } else {
+      // Create suggestion for manual review
+      await prisma.reconciliationAudit.create({
+        action: 'suggestion',
+        ...
+      });
+    }
+  }
+}
+```
+
+---
+
+## Database Schema
+
+### Core Models
+
+**Policy**
+- Unique constraint: `(onchainPolicyId, beneficiaryAddress)`
+- Source: `'api'` or `'onchain'`
+- Status: `PENDING`, `ACTIVE`, `PENDING_ONCHAIN`, `EXPIRED`
+
+**Claim**
+- Source: `'api'` or `'onchain'`  
+- Status: `Submitted`, `UnderReview`, `Approved`, `Rejected`, `Paid`, `PENDING_ONCHAIN`
+
+**ReconciliationAudit**
+- Action: `'auto_fix'`, `'suggestion'`, `'manual_apply'`
+- Full field diff with old/new values
+- Indexed by entity type, ID, and timestamp
+
+---
+
+## Status State Machine
+
+### Policy Lifecycle
+```
+PENDING → TX → PENDING_ONCHAIN → [event] → ACTIVE → [expire] → EXPIRED
+```
+
+### Claim Lifecycle
+```
+Submitted → TX → PENDING_ONCHAIN → [event] → Submitted
+    → reviewClaim → UnderReview
+    → approveClaim → Approved → paymentTX → Paid
+    → rejectClaim → Rejected
+```
+
+---
+
+## API Endpoints
+
+### Reconciliation (Phase C)
+- `GET /api/reconcile/status` - Health & stats
+- `GET /api/reconcile/mismatches` - Detected issues
+- `GET /api/reconcile/suggestions` - Pending actions
+- `POST /api/reconcile/apply/:id` - Apply fix
+- `POST /api/reconcile/run` - Trigger manual run
+
+### Claims (Phase B - Safe)
+- `POST /claim/review/:id` - Move to review
+- `POST /claim/approve-safe/:id` - Approve & pay
+- `POST /claim/reject-safe/:id` - Reject
+
+### Policies (Phase A)
+- `POST /policy/record` - Record from TX
+- `GET /policy/list` - List all (with onchain fields)
+
+---
+
+## Security
+
+1. **Transaction Verification**: No DB writes before blockchain confirmation
+2. **Reconciliation Safety**: Only safe fields auto-fixed
+3. **Idempotency**: Event listener & reconciler prevent duplicates
+4. **Address Validation**: All addresses normalized via `ethers.getAddress()`
+
+---
+
+## Performance
+
+- Event listener: Batch processing, 5s poll interval
+- Reconciler: 100 records/run max, 60s interval
+- Database: Indexed on critical fields
+
+---
+
+**Implementation Status:** Phases A, B, C - COMPLETE ✅

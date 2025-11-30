@@ -88,12 +88,37 @@ npm run dev
 
 Keep this terminal open.
 
-### 7. Start Frontend (New Terminal)
+**Backend will auto-start:**
+- ✅ Event listener (syncs blockchain events)
+- ✅ Reconciler (detects mismatches every 60s)
+
+### 7. Verify Reconciler
+
+```bash
+# Check reconciler status
+curl http://localhost:4000/api/reconcile/status
+
+# Trigger manual reconcile
+curl -X POST http://localhost:4000/api/reconcile/run
+
+# Check for mismatches
+curl http://localhost:4000/api/reconcile/mismatches
+```
+
+### 8. Start Frontend (New Terminal)
 
 ```bash
 cd frontend
 npm run dev
 ```
+
+### 9. Access Admin Dashboard
+
+Open http://localhost:5173/admin/reconciliation to:
+- View reconciliation stats
+- See detected mismatches
+- Apply suggested fixes
+- Trigger manual reconciles
 
 ---
 
