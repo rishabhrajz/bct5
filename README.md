@@ -1,356 +1,539 @@
-# ProjectY - Decentralized Healthcare Insurance
+# ProjectY - Decentralized Insurance Platform
 
-A complete decentralized identity and verifiable credentials system with Ethereum integration for healthcare insurance claims processing.
-
-## 🎯 Overview
-
-ProjectY combines DIDs (Decentralized Identifiers), Verifiable Credentials, IPFS storage, and Ethereum smart contracts to create a transparent, verifiable insurance claims system.
-
-### Key Features
-
-- **Decentralized Identity**: Veramo-based DID management with persistent local keys
-- **Verifiable Credentials**: W3C-compliant VCs for providers and policies
-- **On-Chain Policies & Claims**: Ethereum smart contracts for policy and claim lifecycle
-- **IPFS Storage**: Pinata integration for decentralized document storage
-- **Full-Stack Application**: React frontend + Node.js/Express backend
-- **Comprehensive Testing**: Unit and integration tests included
-
-## 📋 Prerequisites
-
-- **Node.js**: >= 18.0.0 < 25.0.0
-- **npm**: >= 8.0.0
-- **Pinata Account**: For IPFS pinning (get JWT from https://pinata.cloud)
-- **jq**: For demo script (install: `brew install jq` on macOS)
+A production-grade decentralized insurance system with DID/VC integration, smart contracts, and robust transaction handling.
 
 ## 🚀 Quick Start
 
-### 1. Clone and Install
+```bash
+# 1. Install dependencies
+npm install
+cd backend && npm install
+cd ../frontend && npm install
+cd ..
+
+# 2. Run the automated setup
+./DEV_RESET.sh
+```
+
+That's it! The system will:
+- Start Hardhat local blockchain
+- Deploy smart contracts
+- Reset and migrate database
+- Start backend API
+- Start frontend UI
+
+Open http://localhost:5173 and start testing!
+
+---
+
+## 📋 Prerequisites
+
+- **Node.js** v18+ (LTS recommended)
+- **npm** v9+
+- **MetaMask** browser extension
+- **Git**
+
+---
+
+## 🔧 Manual Setup (Step-by-Step)
+
+If you prefer manual setup or the automated script fails:
+
+### 1. Clone Repository
 
 ```bash
+git clone https://github.com/rishabhrajz/bct5
 cd projecty
+```
 
-# Install root dependencies (Hardhat)
+### 2. Install Dependencies
+
+```bash
+# Root dependencies
 npm install
 
-# Install backend dependencies
+# Backend dependencies
 cd backend
 npm install
 
-# Install frontend dependencies
+# Frontend dependencies
 cd ../frontend
 npm install
+
+cd ..
 ```
-
-### 2. Configure Environment
-
-```bash
-cd backend
-cp .env.example .env
-```
-
-Edit `.env` and add your Pinata JWT:
-
-```env
-PINATA_JWT=your_actual_pinata_jwt_here
-```
-
-> **Important**: Get your Pinata JWT from https://app.pinata.cloud/developers/api-keys
 
 ### 3. Start Hardhat Node
 
-In a **new terminal**:
-
 ```bash
-cd projecty
+# Terminal 1
 npx hardhat node
 ```
 
-Keep this running. You'll see 20 test accounts with private keys.
+Keep this terminal open. You should see:
+```
+Started HTTP and WebSocket JSON-RPC server at http://127.0.0.1:8545/
+```
 
 ### 4. Deploy Smart Contracts
 
-In another terminal:
-
 ```bash
-cd projecty
+# Terminal 2
 npx hardhat run contracts/scripts/deploy.js --network localhost
 ```
 
-You should see contract addresses saved to `deployments/deployed.json`.
+You should see:
+```
+✅ IdentityRegistry deployed to: 0x5FbDB...
+✅ PolicyContract deployed to: 0xe7f172...
+✅ ClaimContract deployed to: 0x9fE467...
+```
 
-### 5. Initialize Database
+### 5. Setup Database
 
 ```bash
+# Terminal 2
 cd backend
-npx prisma migrate dev --name init
+npx prisma generate
+npx prisma migrate dev
 ```
 
 ### 6. Start Backend
 
 ```bash
-cd backend
+# Terminal 2 (still in backend/)
 npm run dev
 ```
 
-Backend should start on http://localhost:4000
+You should see:
+```
+✅ Veramo agent initialized
+✅ Contracts initialized
+🚀 Server running on http://localhost:4000
+```
 
-### 7. Start Frontend (Optional)
-
-In another terminal:
+### 7. Start Frontend
 
 ```bash
+# Terminal 3
 cd frontend
 npm run dev
 ```
 
-Frontend will be available at http://localhost:3000
-
-### 8. Run Demo
-
-```bash
-cd backend
-./demo-run.sh
+You should see:
+```
+  ➜  Local:   http://localhost:5173/
 ```
 
-This will execute the complete end-to-end flow:
-1. Onboard a provider with license
-2. Create patient DID
-3. Issue insurance policy
-4. Upload patient document
-5. Submit and verify claim
+---
+
+## 🦊 MetaMask Setup
+
+### Add Localhost Network
+
+1. Open MetaMask
+2. Click network dropdown
+3. Click "Add Network" → "Add network manually"
+4. Fill in:
+
+| Field | Value |
+|-------|-------|
+| Network Name | Hardhat Local |
+| RPC URL | http://127.0.0.1:8545 |
+| Chain ID | 31337 |
+| Currency Symbol | ETH |
+
+5. Click "Save"
+
+### Import Dev Account
+
+This is a **development-only** account with test ETH:
+
+1. Click MetaMask account icon
+2. Select "Import Account"
+3. Paste this private key:
+   ```
+   0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+   ```
+4. Click "Import"
+
+**Address:** `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`  
+**Balance:** ~10000 ETH (test money)
+
+⚠️ **WARNING:** This is a publicly known test key. Never use it with real money!
+
+---
+
+## 🎬 Demonstration Guide
+
+### 1. Provider Onboarding
+
+**Goal:** Register a healthcare provider
+
+1. Open http://localhost:5173/provider/onboard
+2. Connect MetaMask (use Account #2 from Hardhat)
+3. Fill in:
+   - Provider Name: "City Hospital"
+   - License file: Upload any PDF
+4. Click "Submit for Approval"
+5. Wait for transaction confirmation
+6. Note: Provider is now in "PENDING" status
+
+### 2. Provider Approval (Insurer)
+
+**Goal:** Approve the provider
+
+1. Switch to Insurer dashboard: http://localhost:5173/insurer
+2. Connect MetaMask (use Account #1 - the main dev account)
+3. View "Pending Providers" section
+4. Click "Approve" on City Hospital
+5. Confirm MetaMask transaction
+6. Provider is now "APPROVED"
+
+### 3. Patient Onboarding & KYC
+
+**Goal:** Register a patient and complete KYC
+
+1. Switch to Account #3 in MetaMask
+2. Open http://localhost:5173/patient
+3. Click "Upload KYC Document"
+4. Upload any ID document (PDF/image)
+5. Document type: "AADHAAR"
+6. Submit
+
+### 4. KYC Approval (Insurer)
+
+1. Switch back to Account #1 (Insurer)
+2. Go to http://localhost:5173/insurer
+3. View "Pending KYC" section
+4. Click "Verify" on the KYC document
+5. Patient is now verified
+
+### 5. Policy Purchase (Patient)
+
+**Goal:** Buy an insurance policy
+
+1. Switch to Account #3 (Patient)
+2. Go to http://localhost:5173/issue-policy
+3. Fill in:
+   - Coverage Amount: **1 ETH**
+   - Policy Tier: **Standard**
+   - Duration: **365 days**
+4. Click "Request Policy"
+5. MetaMask will popup:
+   - Premium: **0.02 ETH** (2% of coverage)
+   - Click "Confirm"
+6. Wait for transaction...
+7. Success! Policy is created
+
+**What just happened:**
+- ✅ Blockchain transaction sent (`tx.hash`)
+- ✅ Receipt confirmed (block number)
+- ✅ `PolicyIssued` event verified
+- ✅ Database updated to `ACTIVE`
+- ✅ Premium held in smart contract escrow
+
+### 6. View Policy (Patient Dashboard)
+
+1. Go to http://localhost:5173/patient
+2. See your active policy:
+   - Policy ID
+   - Coverage amount
+   - Status: ACTIVE
+   - Premium paid
+   - Start/End dates
+
+### 7. Submit Claim (Provider)
+
+**Goal:** Provider submits a medical claim
+
+1. Switch to Account #2 (Provider)
+2. Go to http://localhost:5173/provider
+3. Click "Submit Claim"
+4. Fill in:
+   - Policy ID: (from patient's policy)
+   - Patient Address: `0x...` (Account #3's address)
+   - Claim Amount: **0.5 ETH**
+   - Upload medical report (PDF)
+5. Submit claim
+6. Claim is now "PENDING"
+
+### 8. Approve Claim (Insurer)
+
+1. Switch to Account #1 (Insurer)
+2. Go to http://localhost:5173/insurer
+3. View "Pending Claims" section
+4. Click "Approve & Pay" on the claim
+5. Enter payout amount: **0.5 ETH**
+6. Click "Approve & Pay"
+7. Confirm MetaMask transaction (sending 0.5 ETH)
+8. Claim paid! Provider receives ETH
+
+---
+
+## 🧪 Testing
+
+### Run Smoke Test
+
+```bash
+node tests/smoke-test.js
+```
+
+Expected output:
+```
+🧪 Starting smoke test...
+✅ Connected as: 0xf39Fd...
+✅ PolicyContract at: 0xe7f17...
+✅ TX sent: 0x...
+✅ Confirmed in block: 5
+✅ API Response: { ok: true, policy: {...} }
+✅ Policy status: ACTIVE
+✅ Smoke test PASSED!
+```
+
+### Run Contract Tests
+
+```bash
+npx hardhat test
+```
+
+---
 
 ## 📁 Project Structure
 
 ```
 projecty/
-├── contracts/              # Solidity smart contracts
-│   ├── IdentityRegistry.sol
-│   ├── PolicyContract.sol
-│   ├── ClaimContract.sol
-│   └── scripts/
-│       └── deploy.js
-├── backend/                # Node.js/Express API
-│   ├── server.js           # Main server
-│   ├── veramo-setup.js     # Veramo agent (persistent keys)
-│   ├── ipfs-pinata.js      # Pinata IPFS integration
-│   ├── contract-service.js # Ethereum contract interface
+├── backend/
+│   ├── services/
+│   │   ├── policy-service-v2.js   # Safe policy recording
+│   │   ├── approval-service.js    # Provider/claim approvals
+│   │   └── claim-service.js       # Claim submission
+│   ├── lib/
+│   │   └── tx-utils.js            # Transaction safety utilities
 │   ├── prisma/
-│   │   └── schema.prisma   # Database schema
-│   ├── services/           # Business logic
-│   │   ├── provider-service.js
-│   │   ├── policy-service.js
-│   │   ├── claim-service.js
-│   │   └── vc-utils.js     # VC verification logic
-│   ├── controllers/        # Request handlers
-│   │   ├── provider-controller.js
-│   │   ├── policy-controller.js
-│   │   └── claim-controller.js
-│   ├── scripts/
-│   │   └── migrate-vc-store.js
-│   ├── demo/               # Demo assets
-│   │   ├── provider-license.jpg
-│   │   └── patient-report.jpg
-│   └── demo-run.sh         # E2E demo script
-├── frontend/               # React + Vite UI
-│   └── src/
-│       ├── pages/
-│       │   ├── ProviderOnboard.jsx
-│       │   ├── IssuePolicy.jsx
-│       │   ├── UploadPatientDoc.jsx
-│       │   ├── SubmitClaim.jsx
-│       │   └── InsurerDashboard.jsx
-│       └── components/
-│           ├── FileUpload.jsx
-│           ├── ConnectWallet.jsx
-│           ├── ResponseBox.jsx
-│           └── TxHashDisplay.jsx
-├── deployments/            # Contract deployment info
-│   └── deployed.json
-├── hardhat.config.js
-├── docker-compose.yml
-└── README.md
+│   │   └── schema.prisma          # Database schema
+│   └── server.js                  # Express API server
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── IssuePolicy.jsx    # Policy purchase
+│   │   │   ├── PatientDashboard.jsx
+│   │   │   ├── ProviderOnboard.jsx
+│   │   │   └── InsurerDashboard.jsx
+│   │   └── utils/
+│   │       └── contracts.js       # Web3 utilities
+├── contracts/
+│   ├── PolicyContract.sol         # Policy management
+│   ├── ClaimContract.sol          # Claim processing
+│   └── IdentityRegistry.sol       # DID registry
+├── scripts/
+│   └── deploy.js                  # Contract deployment
+└── tests/
+    └── smoke-test.js              # End-to-end test
 ```
-
-## 🔧 Technology Stack
-
-### Smart Contracts
-- **Solidity**: ^0.8.20
-- **Hardhat**: ^2.19.4
-- **Ethers**: ^6.13.0
-- **@nomicfoundation/hardhat-toolbox**: ^5.0.0
-
-### Backend
-- **Node.js**: >= 18 < 25
-- **Express**: ^4.18.2
-- **Veramo**: ^4.2.0 (DID & VC management)
-- **@veramo/kms-local**: Persistent file-based key storage
-- **Prisma**: ^4.16.2 (SQLite ORM)
-- **Axios**: ^1.6.2 (Pinata HTTP client)
-- **Ethers**: ^6.13.0
-
-### Frontend
-- **React**: ^18.2.0
-- **Vite**: ^5.0.8
-- **React Router**: ^6.20.0
-- **Ethers**: ^6.13.0
-- **Axios**: ^1.6.2
-
-## 🧪 Testing
-
-### Run Unit Tests
-
-```bash
-cd backend
-npm test
-```
-
-Tests include:
-- VC verification logic (`vc-utils.test.js`)
-- Policy/provider mapping
-- CID matching
-- JWT cryptographic verification
-
-### Run Integration Tests
-
-```bash
-cd backend
-npm run test:integration
-```
-
-Integration tests verify the complete flow from provider onboarding through claim submission.
-
-## 🔑 Key Design Decisions
-
-### 1. Persistent Veramo Keys
-
-**Why?** Decentralization and reproducibility.
-
-Veramo uses `kms-local` with file-based storage (`./veramo_keystore/keys.json`) instead of in-memory or Google KMS. This means:
-- ✅ Keys survive server restarts
-- ✅ Same issuer DID across deployments
-- ✅ No external KMS dependencies
-- ✅ Can be easily migrated to external KMS later
-
-### 2. Database as Single Source of Truth
-
-All VC metadata (CIDs, JWTs, issuer info) is stored in SQLite via Prisma:
-- **Provider** table: Maps provider DIDs to VC CIDs
-- **Policy** table: Maps on-chain policy IDs to provider IDs (critical for verification)
-- **Claim** table: Links claims to policies
-
-### 3. Robust VC Verification
-
-`verifyVcForPolicy()` in `vc-utils.js` implements a multi-step verification process:
-
-1. **Policy Lookup**: Query DB by `onchainPolicyId`
-2. **CID Verification**: Compare presented `vcCid` with stored value
-3. **JWT Verification**: Cryptographic validation using Veramo
-4. **DID Matching**: Ensure credential subject matches provider
-
-Returns a detailed `tried` array for debugging failures.
-
-### 4. Pinata with Retry Logic
-
-IPFS pinnin uses exponential backoff (3 attempts: 1s, 2s, 4s) to handle transient network errors.
-
-## 🐳 Docker Deployment
-
-### Using Docker Compose
-
-```bash
-# Set Pinata JWT
-export PINATA_JWT=your_jwt_here
-
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-## 🎬 Demo Flow Explained
-
-The `demo-run.sh` script demonstrates:
-
-### Step 1: Provider Onboarding
-- Upload provider license to IPFS → `licenseCid`
-- Issue Provider VC (containing `providerDid`, `name`, `licenseCid`)
-- Pin VC to IPFS → `providerVcCid`
-- Store in database
-
-### Step 2: Patient DID Creation
-- Create new DID via Veramo
-- Extract Ethereum address from DID
-
-### Step 3: Policy Issuance
-- Call on-chain `policyContract.issuePolicy()`
-- Extract `policyId` from event
-- Issue Policy VC (containing `policyId`, beneficiary, coverage)
-- Pin VC to IPFS → `policyVcCid`
-- Store in database with **mapping: `onchainPolicyId` → `providerId`**
-
-### Step 4: Document Upload
-- Upload patient report to IPFS → `fileCid`
-
-### Step 5: Claim Submission
-- Backend verifies provider VC using `verifyVcForPolicy()`:
-  - Queries policy by `onchainPolicyId`
-  - Loads associated provider
-  - Compares `presentedVcCid` with stored `provider.vcCid`
-- If verified, submits claim on-chain
-- Stores claim in database
-
-## 🐛 Troubleshooting
-
-### "Hardhat node not running"
-Ensure `npx hardhat node` is running in a separate terminal on port 8545.
-
-### "Contracts not deployed"
-Run: `npx hardhat run contracts/scripts/deploy.js --network localhost`
-
-### "Backend can't find contracts"
-Check that `deployments/deployed.json` exists and contains contract addresses.
-
-### "Pinata upload fails"
-- Verify your `PINATA_JWT` is correct
-- Check Pinata account status
-- Ensure you have pinning capacity
-
-### "VC verification fails"
-Enable verbose mode: `curl "http://localhost:4000/claim/submit?verbose=true" ...`
-
-Check the `tried` array in the response for detailed debugging.
-
-### "Database errors"
-Reset the database:
-```bash
-cd backend
-rm -rf data/
-npx prisma migrate reset
-```
-
-## 📚 Additional Documentation
-
-- See [architecture.md](./architecture.md) for system design details
-- See [API.md](./API.md) for complete API reference
-- See [DEMO_OUTPUT.txt](./DEMO_OUTPUT.txt) for example successful demo run
-
-## 🤝 Contributing
-
-This is a demonstration project. For production use:
-1. Replace `KMS_SECRET_KEY` with a secure value
-2. Use a production-grade database (PostgreSQL)
-3. Implement access control and authentication
-4. Add comprehensive error tracking
-5. Consider migrating to external KMS for key management
-
-## 📄 License
-
-MIT
 
 ---
 
-**Built with ❤️ using Veramo, Ethereum, IPFS, and React**
+## 🔑 Test Accounts
+
+Hardhat provides 20 test accounts. Here are the first 3:
+
+### Account #1 (Insurer/Admin)
+```
+Address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Private Key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+### Account #2 (Provider)
+```
+Address: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+Private Key: 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+```
+
+### Account #3 (Patient)
+```
+Address: 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+Private Key: 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+```
+
+All accounts start with **10000 ETH** on fresh Hardhat node.
+
+---
+
+## 🛠️ Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Kill process on port 8545 (Hardhat)
+lsof -ti:8545 | xargs kill -9
+
+# Kill process on port 4000 (Backend)
+lsof -ti:4000 | xargs kill -9
+
+# Kill process on port 5173 (Frontend)
+lsof -ti:5173 | xargs kill -9
+```
+
+### MetaMask Shows Wrong Balance
+
+1. Open MetaMask
+2. Settings → Advanced
+3. Click "Clear activity tab data"
+4. Refresh page
+
+### "Cannot connect to database"
+
+```bash
+cd backend
+npx prisma generate
+npx prisma migrate reset --force
+```
+
+### "Nonce too high" Error
+
+MetaMask's nonce is out of sync with blockchain:
+
+1. Open MetaMask
+2. Settings → Advanced
+3. Click "Reset Account"
+4. Refresh page
+
+### Contracts Not Found
+
+Redeploy contracts:
+
+```bash
+npx hardhat run contracts/scripts/deploy.js --network localhost
+```
+
+### Frontend Shows Old Contract Addresses
+
+Hard refresh browser:
+- **Mac:** `Cmd + Shift + R`
+- **Windows/Linux:** `Ctrl + Shift + R`
+
+---
+
+## 🔄 Reset Everything
+
+If you want to start fresh:
+
+```bash
+./DEV_RESET.sh
+```
+
+Or manually:
+
+```bash
+# 1. Stop all processes
+lsof -ti:8545 | xargs kill -9
+lsof -ti:4000 | xargs kill -9
+lsof -ti:5173 | xargs kill -9
+
+# 2. Reset database
+cd backend
+npx prisma migrate reset --force
+
+# 3. Clear Veramo
+rm -rf backend/veramo_keystore/*
+
+# 4. Start fresh Hardhat
+npx hardhat node &
+
+# 5. Redeploy contracts
+npx hardhat run contracts/scripts/deploy.js --network localhost
+
+# 6. Restart backend
+cd backend && npm run dev &
+
+# 7. Restart frontend
+cd frontend && npm run dev &
+```
+
+See [DEV_RESET.md](DEV_RESET.md) for detailed instructions.
+
+---
+
+## 📚 API Endpoints
+
+### Policy
+- `POST /policy/record` - Record policy from blockchain tx
+- `GET /policy/list` - List all policies
+- `GET /policy/:id` - Get policy by ID
+
+### Provider
+- `POST /provider/onboard` - Register new provider
+- `GET /provider/list` - List all providers
+- `POST /provider/approve/:id` - Approve provider (insurer)
+
+### Claim
+- `POST /claim/submit` - Submit claim
+- `GET /claim/pending` - Get pending claims
+- `POST /claim/approve/:id` - Approve & pay claim
+
+### KYC
+- `POST /kyc/upload` - Upload KYC document
+- `GET /kyc/pending` - Get pending KYC docs
+- `POST /kyc/approve/:id` - Approve KYC
+
+---
+
+## 🎯 Key Features
+
+- ✅ **Robust Transaction Handling** - Timeouts, retries, event verification
+- ✅ **Auto-Approval** - Policies activate immediately on payment
+- ✅ **Premium Escrow** - Funds held on-chain until claims
+- ✅ **MetaMask Integration** - Web3 wallet for all transactions
+- ✅ **DID/VC Support** - Veramo integration for credentials
+- ✅ **IPFS Storage** - Documents stored on Pinata
+- ✅ **Multi-Role System** - Patient, Provider, Insurer workflows
+- ✅ **Event-Driven** - Smart contract events tracked
+- ✅ **Database Sync** - Blockchain ↔ DB reconciliation
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+---
+
+## 📝 License
+
+This project is for educational purposes.
+
+---
+
+## 🙋 Support
+
+Issues? Check:
+1. [DEV_RESET.md](DEV_RESET.md) - Reset guide
+2. [Troubleshooting](#troubleshooting) - Common issues
+3. GitHub Issues - Report bugs
+
+---
+
+## 🎉 Demo Success Checklist
+
+After setup, verify:
+
+- [ ] Hardhat node running on port 8545
+- [ ] Backend running on port 4000
+- [ ] Frontend running on port 5173
+- [ ] MetaMask connected to localhost:8545
+- [ ] Dev account imported with ~10000 ETH
+- [ ] Can register provider
+- [ ] Can approve provider (as insurer)
+- [ ] Can buy policy (as patient)
+- [ ] Can submit claim (as provider)
+- [ ] Can approve claim (as insurer)
+- [ ] Smoke test passes: `node tests/smoke-test.js`
+
+---
+
+**Built with:** Hardhat • Ethers.js • Veramo • Prisma • React • Express

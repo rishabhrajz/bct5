@@ -44,22 +44,30 @@ model Policy {
   coverageAmount    String     // Store as string to avoid precision loss
   tier              String    @default("Standard")  // Basic, Standard, Premium
   premiumPaid       String?    // Amount paid in Wei
-  premiumTxHash     String?    // Transaction hash of premium payment
-  status            String    @default("PENDING")  // PENDING, APPROVED, REJECTED, ACTIVE, EXPIRED
+  premiumTxHash     String?    // Transaction hash of premium payment (legacy)
+  onchainTxHash     String?    // Transaction hash (new field for v2)
+  onchainBlockNumber Int?      // Block number where policy was created
+  status            String    @default("PENDING")  // PENDING, PENDING_ONCHAIN, ACTIVE, REJECTED, EXPIRED
+  vcStatus          String    @default("VC_PENDING")  // VC_PENDING, VC_ISSUED, VC_ISSUE_FAILED
+  vcIssuedAt        DateTime? // When VC was issued
+  vcRetryCount      Int       @default(0)  // Number of times VC issuance was retried
   rejectionReason   String?
   refundTxHash      String?    // If policy rejected and refunded
   approvedAt        DateTime?
   startEpoch        Int
   endEpoch          Int
   providerId        Int
+  source            String    @default("api")  // "api" or "onchain" - how policy was created
   createdAt         DateTime  @default(now())
   
   provider          Provider  @relation(fields: [providerId], references: [id])
   claims            Claim[]
   
+  @@unique([onchainPolicyId, beneficiaryAddress], name: "onchainPolicyId_beneficiaryAddress")
   @@index([onchainPolicyId])
   @@index([beneficiaryAddress])
   @@index([status])
+  @@index([vcStatus])
 }
 
 model Claim {
@@ -74,7 +82,10 @@ model Claim {
   providerVcCid     String    @default("")  // Provider's VC CID
   fileCid           String?    // Legacy field for backward compatibility
   amount            String    // Claim amount in Wei
-  status            String    @default("PENDING")  // PENDING, UNDER_REVIEW, APPROVED, REJECTED, PAID
+  status            String    @default("PENDING")  // PENDING, PENDING_ONCHAIN, UNDER_REVIEW, APPROVED, REJECTED, PAID
+  onchainTxHash     String?   // Transaction hash for on-chain claim action
+  onchainBlockNumber Int?     // Block number where claim was processed
+  source            String    @default("api")  // "api" or "onchain" - how claim was created
   payoutAmount      String?   // Actual payout amount
   payoutTxHash      String?   // Payment transaction hash
   rejectionReason   String?

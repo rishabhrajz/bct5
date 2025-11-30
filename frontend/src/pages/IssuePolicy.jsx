@@ -87,12 +87,12 @@ export default function IssuePolicy() {
 
             toast.loading('Saving policy to database...');
 
-            // Save policy to backend database
+            // Save policy to backend database with transaction verification
             const backendRes = await fetch(`${API_BASE}/policy/record`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    providerId: 1, // Default provider ID
+                    txHash: receipt.hash,  // Transaction hash for verification
                     beneficiaryAddress: account,
                     beneficiaryDid: `did:ethr:localhost:${account}`,
                     coverageAmount: coverageWei.toString(),
@@ -100,7 +100,6 @@ export default function IssuePolicy() {
                     endEpoch,
                     tier,
                     premiumAmount: premiumWei.toString(),
-                    onchainPolicyId,
                     kycCid: verifiedKyc.documentCid,
                 }),
             });
@@ -108,10 +107,13 @@ export default function IssuePolicy() {
             if (!backendRes.ok) {
                 console.error('Backend save failed, but blockchain transaction succeeded');
                 toast.error('⚠️ Policy created on blockchain but database save failed');
+            } else {
+                const result = await backendRes.json();
+                console.log('✅ Policy recorded:', result);
             }
 
             toast.dismiss();
-            toast.success('✅ Policy requested! Premium held in escrow. Awaiting insurer approval.');
+            toast.success('✅ Policy requested! Premium held in escrow. Awaiting verification.');
 
             // Show success message and redirect to patient dashboard after 2 seconds
             setTimeout(() => {
