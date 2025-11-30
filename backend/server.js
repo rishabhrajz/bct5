@@ -4,7 +4,8 @@ import cors from 'cors';
 import multer from 'multer';
 import { PrismaClient } from '@prisma/client';
 import { initContracts } from './contract-service.js';
-import { getOrCreateIssuerDid, veramoAgent } from './veramo-setup.js';
+import { getOrCreateIssuerDid } from './veramo-setup.js';
+import { startEventListener, getListenerHealth } from './services/event-listener.js';
 import { pinFile } from './ipfs-pinata.js';
 import { handleProviderOnboard, handleListProviders } from './controllers/provider-controller.js';
 import { handleIssuePolicy, handleListPolicies, handleGetPolicy } from './controllers/policy-controller.js';
@@ -12,9 +13,9 @@ import { handleSubmitClaim, handleUpdateClaimStatus, handleListClaims } from './
 import * as approvalService from './services/approval-service.js';
 import * as kycService from './services/kyc-service.js';
 
+const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 4000;
-const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors());
@@ -26,7 +27,12 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    const listenerHealth = getListenerHealth();
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        eventListener: listenerHealth
+    });
 });
 
 // ===== Provider Routes =====
@@ -35,9 +41,12 @@ app.get('/provider/list', handleListProviders);
 
 // ===== Policy Routes =====
 app.post('/policy/issue', handleIssuePolicy);
+
+// Canonical policy recording endpoint with transaction verification
 app.post('/policy/record', async (req, res) => {
     try {
         const {
+            txHash,
             beneficiaryAddress,
             beneficiaryDid,
             coverageAmount,
@@ -45,61 +54,36 @@ app.post('/policy/record', async (req, res) => {
             endEpoch,
             tier,
             premiumAmount,
-            onchainPolicyId,
-            kycCid,
-            providerId = 1
+            kycCid
         } = req.body;
 
-        console.log('📋 Recording policy request from blockchain...');
+        console.log('[API] Recording policy from tx:', txHash);
 
-        // Get or create a default provider if it doesn't exist
-        let provider = await prisma.provider.findFirst();
-        if (!provider) {
-            // Create a default provider for testing
-            provider = await prisma.provider.create({
-                data: {
-                    providerDid: 'did:ethr:localhost:0x0000000000000000000000000000000000000001',
-                    providerAddress: '0x0000000000000000000000000000000000000001',
-                    name: 'Default Provider',
-                    issuerDid: 'did:ethr:localhost:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
-                    issuedAt: new Date(),
-                    licenseCid: '',
-                    vcCid: '',
-                    status: 'APPROVED'
-                }
-            });
-        }
+        // Import safe policy service
+        const { recordPolicyFromBlockchain } = await import('./services/policy-service-v2.js');
 
-        // Create policy in database with PENDING status
-        const policy = await prisma.policy.create({
-            data: {
-                provider: {
-                    connect: { id: provider.id }
-                },
-                issuerDid: 'did:ethr:localhost:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
-                beneficiaryAddress,
-                beneficiaryDid: beneficiaryDid || `did:ethr:localhost:${beneficiaryAddress}`,
-                coverageAmount: coverageAmount.toString(),
-                startEpoch: parseInt(startEpoch),
-                endEpoch: parseInt(endEpoch),
-                tier: tier || 'Standard',
-                premiumPaid: premiumAmount?.toString() || '0',
-                onchainPolicyId: parseInt(onchainPolicyId) || 0,
-                kycDocCid: kycCid || '',
-                status: 'ACTIVE', // Auto-approve when premium is paid
-                policyVcCid: '',
-                approvedAt: new Date(), // Mark as approved now
-            },
+        // Record policy with transaction verification
+        const policy = await recordPolicyFromBlockchain({
+            txHash,
+            beneficiaryAddress,
+            beneficiaryDid,
+            coverageAmount,
+            startEpoch,
+            endEpoch,
+            tier,
+            premiumAmount,
+            kycCid
         });
-
-        console.log(`✅ Policy recorded in database: ID ${policy.id}`);
 
         res.json({
             ok: true,
-            policy
+            policy,
+            message: policy.status === 'ACTIVE'
+                ? 'Policy activated successfully'
+                : 'Policy pending on-chain confirmation'
         });
     } catch (error) {
-        console.error('Error recording policy:', error);
+        console.error('[API] Error in /policy/record:', error);
         res.status(500).json({
             ok: false,
             error: error.message
@@ -113,6 +97,47 @@ app.get('/policy/:policyId', handleGetPolicy);
 app.post('/claim/submit', handleSubmitClaim);
 app.post('/claim/update-status', handleUpdateClaimStatus);
 app.get('/claim/list', handleListClaims);
+
+// Safe claim endpoints
+import * as claimServiceSafe from './services/claim-service-safe.js';
+
+app.post('/claim/review/:id', async (req, res) => {
+    try {
+        const result = await claimServiceSafe.reviewClaimSafe(parseInt(req.params.id));
+        res.json(result);
+    } catch (error) {
+        console.error('Review claim error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/claim/approve-safe/:id', async (req, res) => {
+    try {
+        const { payoutAmount } = req.body;
+        if (!payoutAmount) {
+            return res.status(400).json({ error: 'payoutAmount required' });
+        }
+        const result = await claimServiceSafe.approveClaimSafe(parseInt(req.params.id), payoutAmount);
+        res.json(result);
+    } catch (error) {
+        console.error('Approve claim error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/claim/reject-safe/:id', async (req, res) => {
+    try {
+        const { reason } = req.body;
+        if (!reason) {
+            return res.status(400).json({ error: 'reason required' });
+        }
+        const result = await claimServiceSafe.rejectClaimSafe(parseInt(req.params.id), reason);
+        res.json(result);
+    } catch (error) {
+        console.error('Reject claim error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // ===== File Upload Route =====
 app.post('/file/upload', upload.single('file'), async (req, res) => {
@@ -316,28 +341,31 @@ app.get('/claim/under-review', async (req, res) => {
     }
 });
 
+// Legacy endpoint - use /claim/review/:id instead
 app.post('/claim/under-review/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const claim = await approvalService.setClaimUnderReview(parseInt(id));
-        res.json({ success: true, claim });
+        const result = await claimServiceSafe.reviewClaimSafe(parseInt(req.params.id));
+        res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
+// Legacy endpoint - use /claim/approve-safe/:id instead  
 app.post('/claim/approve/:id', async (req, res) => {
     try {
-        const { id } = req.params;
         const { payoutAmount } = req.body;
-
-        const claim = await approvalService.approveClaim(parseInt(id), payoutAmount);
-        res.json({ success: true, claim });
+        if (!payoutAmount) {
+            return res.status(400).json({ error: 'payoutAmount required' });
+        }
+        const result = await claimServiceSafe.approveClaimSafe(parseInt(req.params.id), payoutAmount);
+        res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
+// Legacy endpoint - use /claim/reject-safe/:id instead
 app.post('/claim/reject/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -494,10 +522,18 @@ async function startServer() {
         await getOrCreateIssuerDid();
 
         // Initialize contracts
-        console.log('\n⛓️  Initializing contracts...');
+        console.log('⛓️  Initializing contracts...');
         await initContracts();
+        console.log('✅ Contracts initialized\n');
 
-        // Start listening
+        // Start event listener in development
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('🎧 Starting event listener...');
+            await startEventListener();
+            console.log('✅ Event listener started\n');
+        }
+
+        // Start HTTP server
         app.listen(PORT, () => {
             console.log(`\n✅ ProjectY Backend running on port ${PORT}`);
             console.log(`   Health check: http://localhost:${PORT}/health`);
