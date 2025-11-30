@@ -103,7 +103,7 @@ async function runE2ETest() {
             const tier = 1;
             const now = Math.floor(Date.now() / 1000);
             const startEpoch = now + 60;
-            const endEpoch = start Epoch + (365 * 24 * 60 * 60);
+            const endEpoch = startEpoch + (365 * 24 * 60 * 60);
             const premiumAmount = ethers.parseEther('0.02');
 
             const tx = await policyContract.requestPolicy(
